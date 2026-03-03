@@ -1,28 +1,10 @@
-const STOCK_UNIVERSE = [
-  { code: '600519', name: '贵州茅台', industry: '白酒' },
-  { code: '000858', name: '五粮液', industry: '白酒' },
-  { code: '601318', name: '中国平安', industry: '保险' },
-  { code: '600036', name: '招商银行', industry: '银行' },
-  { code: '300750', name: '宁德时代', industry: '新能源' },
-  { code: '002594', name: '比亚迪', industry: '新能源' },
-  { code: '688981', name: '中芯国际', industry: '半导体' },
-  { code: '603986', name: '兆易创新', industry: '半导体' },
-  { code: '600276', name: '恒瑞医药', industry: '医药' },
-  { code: '300015', name: '爱尔眼科', industry: '医疗服务' },
-  { code: '002415', name: '海康威视', industry: '安防' },
-  { code: '000333', name: '美的集团', industry: '家电' },
-  { code: '601012', name: '隆基绿能', industry: '新能源' },
-  { code: '600887', name: '伊利股份', industry: '消费' },
-  { code: '601888', name: '中国中免', industry: '消费' },
-];
-
 const education = [
   ['涨跌幅', '衡量短期价格动量，持续强势通常有趋势资金参与。'],
   ['换手率', '代表交易活跃度。过低流动性不足，过高可能短线博弈激烈。'],
   ['PE(动态)', '估值核心指标之一，不同行业合理区间不同。'],
-  ['量比/成交额', '反映当日资金活跃程度，配合趋势判断更可靠。'],
+  ['振幅', '波动大小。振幅过大通常意味着风险更高。'],
   ['行业比较', '同一行业内比较更有效，跨行业直接比PE意义有限。'],
-  ['综合评分', '把估值、趋势、活跃度、行业权重合并成可解释打分。'],
+  ['综合评分', '把估值、趋势、活跃度、稳定性合并成可解释打分。'],
 ];
 
 const industryNorms = {
@@ -46,25 +28,6 @@ const riskProfile = qs('#risk-profile');
 const scoreMin = qs('#score-min');
 const scoreMinV = qs('#score-min-v');
 const weightsDiv = qs('#weights');
-
-function marketCode(code) {
-  if (code.startsWith('6') || code.startsWith('688')) return 'sh' + code;
-  return 'sz' + code;
-}
-
-function jsonpFetch(url, callbackName) {
-  return new Promise((resolve, reject) => {
-    const script = document.createElement('script');
-    script.src = `${url}${url.includes('?') ? '&' : '?'}_cb=${callbackName}`;
-    script.onerror = () => reject(new Error('网络失败'));
-    window[callbackName] = (payload) => {
-      resolve(payload);
-      delete window[callbackName];
-      script.remove();
-    };
-    document.body.appendChild(script);
-  });
-}
 
 function scorePct(pct) { return Math.max(0, Math.min(100, 50 + pct * 8)); }
 function scoreTurnover(v) {
@@ -90,43 +53,99 @@ function scoreStability(amplitude) {
   return 28;
 }
 
-async function fetchRealtimeQuotes() {
-  const codes = STOCK_UNIVERSE.map((s) => marketCode(s.code)).join(',');
-  const ts = Date.now();
-  const url = `https://qt.gtimg.cn/q=${codes}&r=${ts}`;
+function jsonp(url, timeoutMs = 15000) {
+  return new Promise((resolve, reject) => {
+    const cbName = `oc_cb_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+    const script = document.createElement('script');
+    const cleanup = () => {
+      if (window[cbName]) delete window[cbName];
+      script.remove();
+    };
+    const timer = setTimeout(() => {
+      cleanup();
+      reject(new Error('JSONP timeout'));
+    }, timeoutMs);
 
-  const text = await fetch(url, { cache: 'no-store', mode: 'cors' }).then((r) => r.text()).catch(async () => {
-    // fallback to JSONP relay for strict browsers/CORS blocks
-    const cb = 'cb_' + Math.random().toString(36).slice(2);
-    const payload = await jsonpFetch(`https://r.jina.ai/http://qt.gtimg.cn/q=${codes}&r=${ts}`, cb).catch(() => null);
-    return payload || '';
+    window[cbName] = (data) => {
+      clearTimeout(timer);
+      cleanup();
+      resolve(data);
+    };
+
+    script.onerror = () => {
+      clearTimeout(timer);
+      cleanup();
+      reject(new Error('JSONP network error'));
+    };
+
+    script.src = `${url}${url.includes('?') ? '&' : '?'}cb=${cbName}&_=${Date.now()}`;
+    document.body.appendChild(script);
   });
+}
 
-  const lines = String(text).split(';').map((s) => s.trim()).filter(Boolean);
-  const byCode = new Map(STOCK_UNIVERSE.map((s) => [s.code, s]));
-  const out = [];
+function normalizeIndustry(raw) {
+  if (!raw) return '其他';
+  const s = String(raw);
+  if (s.includes('银行')) return '银行';
+  if (s.includes('保险')) return '保险';
+  if (s.includes('半导体') || s.includes('芯片')) return '半导体';
+  if (s.includes('新能源') || s.includes('光伏') || s.includes('电池')) return '新能源';
+  if (s.includes('白酒') || s.includes('酿酒')) return '白酒';
+  if (s.includes('医药') || s.includes('生物')) return '医药';
+  if (s.includes('医疗')) return '医疗服务';
+  if (s.includes('家电')) return '家电';
+  if (s.includes('消费') || s.includes('食品')) return '消费';
+  if (s.includes('安防')) return '安防';
+  return s.length > 8 ? `${s.slice(0, 8)}…` : s;
+}
 
-  for (const line of lines) {
-    const m = line.match(/v_(?:sh|sz)(\d+)="([^"]+)"/);
-    if (!m) continue;
-    const code = m[1];
-    const raw = m[2].split('~');
-    const meta = byCode.get(code);
-    if (!meta) continue;
+function toStock(item) {
+  return {
+    code: String(item.f12 || ''),
+    name: item.f14 || '-',
+    industryRaw: item.f100 || '其他',
+    industry: normalizeIndustry(item.f100),
+    price: +(item.f2 || 0),
+    pct: +(item.f3 || 0),
+    turnover: +(item.f8 || 0),
+    pe: +(item.f9 || 0),
+    high: +(item.f15 || 0),
+    low: +(item.f16 || 0),
+    amplitude: +(item.f7 || 0),
+    amountWan: +(item.f6 || 0),
+  };
+}
 
-    const price = +(raw[3] || 0);
-    const prevClose = +(raw[4] || 0);
-    const pct = +(raw[32] || ((price && prevClose) ? (((price - prevClose) / prevClose) * 100).toFixed(2) : 0));
-    const pe = +(raw[39] || 0);
-    const turnover = +(raw[38] || 0);
-    const high = +(raw[33] || price);
-    const low = +(raw[34] || price);
-    const amplitude = price ? +(((high - low) / price) * 100).toFixed(2) : 0;
-    const amountWan = +(raw[37] || 0);
+async function fetchMarketPage(pageNo, pageSize = 200) {
+  const fs = encodeURIComponent('m:0+t:6,m:0+t:13,m:0+t:80,m:1+t:2,m:1+t:23,m:0+t:81+s:2048');
+  const fields = 'f12,f14,f100,f2,f3,f6,f7,f8,f9,f15,f16';
+  const url = `https://push2.eastmoney.com/api/qt/clist/get?pn=${pageNo}&pz=${pageSize}&po=1&np=1&fltt=2&invt=2&fid=f3&fs=${fs}&fields=${fields}`;
+  const data = await jsonp(url);
+  if (!data || !data.data) return { total: 0, items: [] };
+  const total = Number(data.data.total || 0);
+  const diff = Array.isArray(data.data.diff) ? data.data.diff : [];
+  return { total, items: diff.map(toStock).filter((s) => s.code && s.price > 0) };
+}
 
-    out.push({ ...meta, price, pct, pe, turnover, amplitude, amountWan });
+async function fetchAllMarketStocks() {
+  const first = await fetchMarketPage(1, 200);
+  const total = first.total || first.items.length;
+  const pages = Math.max(1, Math.ceil(total / 200));
+  const all = [...first.items];
+  qs('#summary').innerHTML = `<span>全市场加载中：1/${pages}</span><span>已获取 ${all.length}/${total}</span>`;
+
+  for (let p = 2; p <= pages; p++) {
+    try {
+      const r = await fetchMarketPage(p, 200);
+      all.push(...r.items);
+    } catch (e) {
+      // 单页失败继续下一页，保证尽可能多拿到数据
+    }
+    if (p % 3 === 0 || p === pages) {
+      qs('#summary').innerHTML = `<span>全市场加载中：${p}/${pages}</span><span>已获取 ${all.length}/${total}</span>`;
+    }
   }
-  return out;
+  return all;
 }
 
 function analyzeOne(s, weights) {
@@ -154,6 +173,7 @@ function setupIndustries() {
 }
 
 function render() {
+  if (!stocks.length) return;
   const weights = weightPresets[riskProfile.value];
   analyzed = stocks.map((s) => analyzeOne(s, weights)).sort((a, b) => b.score - a.score);
 
@@ -161,26 +181,26 @@ function render() {
   const min = +scoreMin.value;
   const filtered = analyzed.filter((s) => (industry === '全部' || s.industry === industry) && s.score >= min);
 
-  qs('#tbody').innerHTML = analyzed.map((s) => `<tr>
+  qs('#tbody').innerHTML = analyzed.slice(0, 1000).map((s) => `<tr>
     <td>${s.code}</td><td>${s.name}</td><td>${s.industry}</td>
-    <td>${s.pe || '-'}</td><td>-</td><td>-</td><td class="${s.pct >= 0 ? 'up' : 'down'}">${s.pct}%</td><td>-</td><td>-</td>
+    <td>${s.pe > 0 ? s.pe : '-'}</td><td>-</td><td>-</td><td class="${s.pct >= 0 ? 'up' : 'down'}">${s.pct}%</td><td>-</td><td>-</td>
     <td class="score">${s.score}</td></tr>`).join('');
 
-  const top = filtered.slice(0, 5);
-  qs('#recommend-list').innerHTML = top.map((s) => `<div class="stock-item"><div><b>${s.name} (${s.code})</b> · ${s.industry}<br/><span class="muted">现价 ${s.price} / 涨跌 ${s.pct}% / 换手 ${s.turnover}% / PE ${s.pe || '-'}</span></div><div><span class="badge">${s.tag}</span> <b>${s.score}</b></div></div>`).join('') || '<p class="muted">没有符合条件的股票，放宽筛选试试。</p>';
+  const top = filtered.slice(0, 10);
+  qs('#recommend-list').innerHTML = top.map((s) => `<div class="stock-item"><div><b>${s.name} (${s.code})</b> · ${s.industry}<br/><span class="muted">现价 ${s.price} / 涨跌 ${s.pct}% / 换手 ${s.turnover}% / PE ${s.pe > 0 ? s.pe : '-'}</span></div><div><span class="badge">${s.tag}</span> <b>${s.score}</b></div></div>`).join('') || '<p class="muted">没有符合条件的股票，放宽筛选试试。</p>';
 
-  qs('#summary').innerHTML = `<span>实时样本 ${stocks.length}</span><span>入选 ${filtered.length}</span><span>更新时间 ${new Date().toLocaleTimeString()}</span>`;
+  qs('#summary').innerHTML = `<span>全市场样本 ${stocks.length}</span><span>筛选入选 ${filtered.length}</span><span>表格展示前 1000 条</span><span>更新时间 ${new Date().toLocaleTimeString()}</span>`;
 }
 
-async function refreshData() {
-  qs('#summary').innerHTML = '<span>正在拉取实时行情...</span>';
+async function refreshAllMarket() {
+  qs('#summary').innerHTML = '<span>正在加载全市场股票，请稍候...</span>';
   try {
-    stocks = await fetchRealtimeQuotes();
+    stocks = await fetchAllMarketStocks();
     if (!stocks.length) throw new Error('empty');
     setupIndustries();
     render();
   } catch (e) {
-    qs('#summary').innerHTML = '<span>实时接口获取失败，请稍后重试</span>';
+    qs('#summary').innerHTML = '<span>全市场接口获取失败，请稍后重试</span>';
   }
 }
 
@@ -188,8 +208,8 @@ function setupLearn() {
   qs('#learn-cards').innerHTML = education.map(([t, d]) => `<article><h3>${t}</h3><p class="muted">${d}</p></article>`).join('');
 }
 
-qs('#load-demo').textContent = '刷新实时数据';
-qs('#load-demo').onclick = refreshData;
+qs('#load-demo').textContent = '刷新全市场数据';
+qs('#load-demo').onclick = refreshAllMarket;
 qs('#run-analysis').onclick = render;
 qs('#apply').onclick = render;
 riskProfile.onchange = () => { renderWeights(); render(); };
@@ -198,5 +218,5 @@ qs('#csv-input').style.display = 'none';
 
 renderWeights();
 setupLearn();
-refreshData();
-setInterval(refreshData, 60 * 1000);
+refreshAllMarket();
+setInterval(refreshAllMarket, 2 * 60 * 1000);
