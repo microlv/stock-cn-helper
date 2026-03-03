@@ -81,7 +81,8 @@ function jsonp(url, timeoutMs = 15000) {
       reject(new Error('JSONP network error'));
     };
 
-    script.src = `${url}${url.includes('?') ? '&' : '?'}cb=${cbName}&_=${Date.now()}`;
+    // Eastmoney JSONP commonly uses callback=xxx (some envs accept cb=xxx only intermittently)
+    script.src = `${url}${url.includes('?') ? '&' : '?'}callback=${cbName}&_=${Date.now()}`;
     document.body.appendChild(script);
   });
 }
@@ -122,7 +123,7 @@ function toStock(item) {
 async function fetchMarketPage(pageNo, pageSize = 200) {
   const fs = encodeURIComponent('m:0+t:6,m:0+t:13,m:0+t:80,m:1+t:2,m:1+t:23,m:0+t:81+s:2048');
   const fields = 'f12,f14,f100,f2,f3,f6,f7,f8,f9,f15,f16';
-  const url = `https://push2.eastmoney.com/api/qt/clist/get?pn=${pageNo}&pz=${pageSize}&po=1&np=1&fltt=2&invt=2&fid=f3&fs=${fs}&fields=${fields}`;
+  const url = `https://push2.eastmoney.com/api/qt/clist/get?pn=${pageNo}&pz=${pageSize}&po=1&np=1&ut=bd1d9ddb04089700cf9c27f6f7426281&fltt=2&invt=2&fid=f3&fs=${fs}&fields=${fields}`;
   const data = await jsonp(url);
   if (!data || !data.data) return { total: 0, items: [] };
   const total = Number(data.data.total || 0);
@@ -153,7 +154,7 @@ async function fetchAllMarketStocks() {
 
 async function fetchIndexConstituents(symbol) {
   const fields = 'f12,f14,f100,f2,f3,f6,f7,f8,f9,f15,f16';
-  const url = `https://push2.eastmoney.com/api/qt/clist/get?pn=1&pz=800&po=1&np=1&fltt=2&invt=2&fid=f3&fs=b:${symbol}&fields=${fields}`;
+  const url = `https://push2.eastmoney.com/api/qt/clist/get?pn=1&pz=800&po=1&np=1&ut=bd1d9ddb04089700cf9c27f6f7426281&fltt=2&invt=2&fid=f3&fs=b:${symbol}&fields=${fields}`;
   const data = await jsonp(url);
   const diff = Array.isArray(data?.data?.diff) ? data.data.diff : [];
   return diff.map(toStock).filter((s) => s.code && s.price > 0);
