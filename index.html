@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Stock CN Helper</title>
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <div class="noise"></div>
+    <main class="layout">
+      <header class="topbar card">
+        <div>
+          <h1>Stock CN Helper</h1>
+          <p>行业指标分析 · 新手学习友好 · 可解释评分</p>
+        </div>
+        <div class="top-actions">
+          <button id="load-demo">加载示例数据</button>
+          <label class="upload">
+            导入CSV
+            <input id="csv-input" type="file" accept=".csv" />
+          </label>
+        </div>
+      </header>
+
+      <section class="grid-2">
+        <aside class="card panel">
+          <h2>筛选与权重</h2>
+          <label>行业
+            <select id="industry-filter"></select>
+          </label>
+          <label>风险偏好
+            <select id="risk-profile">
+              <option value="balanced">平衡</option>
+              <option value="growth">成长</option>
+              <option value="value">价值</option>
+            </select>
+          </label>
+          <label>最低评分 <span id="score-min-v">60</span>
+            <input type="range" id="score-min" min="0" max="100" value="60" />
+          </label>
+          <div class="weights" id="weights"></div>
+          <button id="apply">应用筛选</button>
+        </aside>
+
+        <section class="card panel">
+          <h2>推荐结果（量化打分）</h2>
+          <p class="muted">提示：这是策略筛选结果，不构成投资建议。</p>
+          <div id="summary" class="summary"></div>
+          <div id="recommend-list" class="stock-list"></div>
+        </section>
+      </section>
+
+      <section class="card panel">
+        <div class="panel-head">
+          <h2>全市场列表（当前数据集）</h2>
+          <button id="run-analysis">重新分析</button>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>代码</th><th>名称</th><th>行业</th><th>PE</th><th>PB</th><th>ROE%</th><th>营收增速%</th><th>负债率%</th><th>股息率%</th><th>评分</th>
+            </tr>
+          </thead>
+          <tbody id="tbody"></tbody>
+        </table>
+      </section>
+
+      <section class="card panel learn">
+        <h2>指标学习卡（新手友好）</h2>
+        <div id="learn-cards" class="learn-cards"></div>
+      </section>
+    </main>
+
+    <script src="./app.js"></script>
+  </body>
+</html>
