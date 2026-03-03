@@ -97,13 +97,13 @@ function render() {
   const min = +scoreMin.value;
   const filtered = analyzed.filter((s) => (industry === '全部' || s.industry === industry) && s.score >= min);
 
-  qs('#tbody').innerHTML = analyzed.slice(0, 1000).map((s) => `<tr><td>${s.code}</td><td>${s.name}</td><td>${s.industry}</td><td>${s.pe > 0 ? s.pe : '-'}</td><td>-</td><td>-</td><td class="${s.pct >= 0 ? 'up' : 'down'}">${s.pct}%</td><td>-</td><td>-</td><td class="score">${s.score}</td></tr>`).join('');
+  qs('#tbody').innerHTML = filtered.slice(0, 1000).map((s) => `<tr><td>${s.code}</td><td>${s.name}</td><td>${s.industry}</td><td>${s.pe > 0 ? s.pe : '-'}</td><td>-</td><td>-</td><td class="${s.pct >= 0 ? 'up' : 'down'}">${s.pct}%</td><td>-</td><td>-</td><td class="score">${s.score}</td></tr>`).join('');
 
   const top = filtered.slice(0, 10);
   qs('#recommend-list').innerHTML = top.map((s) => `<div class="stock-item"><div><b>${s.name} (${s.code})</b> · ${s.industry}<br/><span class="muted">现价 ${s.price} / 涨跌 ${s.pct}% / 换手 ${s.turnover}% / PE ${s.pe > 0 ? s.pe : '-'}</span></div><div><span class="badge">${s.tag}</span> <b>${s.score}</b></div></div>`).join('') || '<p class="muted">没有符合条件的股票，放宽筛选试试。</p>';
 
   const stamp = snapshotUpdatedAt ? new Date(snapshotUpdatedAt).toLocaleString() : '本地兜底数据';
-  qs('#summary').innerHTML = `<span>样本 ${stocks.length}</span><span>筛选入选 ${filtered.length}</span><span>表格前1000条</span><span>数据时间 ${stamp}</span>`;
+  qs('#summary').innerHTML = `<span>当前范围样本 ${stocks.length}</span><span>筛选入选 ${filtered.length}</span><span>表格展示 ${Math.min(filtered.length, 1000)} 条</span><span>数据时间 ${stamp}</span>`;
 }
 
 async function loadSnapshot() {
