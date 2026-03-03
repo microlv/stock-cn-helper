@@ -1,0 +1,34 @@
+name: Refresh market data
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "*/15 1-7 * * 1-5" # Beijing 09:00-15:59 (UTC 01:00-07:59), weekdays
+
+permissions:
+  contents: write
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install deps
+        run: pip install requests
+
+      - name: Fetch market snapshot
+        run: python scripts/fetch_market.py
+
+      - name: Commit data if changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/market.json
+          git diff --cached --quiet || git commit -m "chore: refresh market snapshot"
+          git push
