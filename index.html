@@ -26,6 +26,14 @@
       <section class="grid-2">
         <aside class="card panel">
           <h2>筛选与权重</h2>
+          <label>市场范围
+            <select id="market-scope">
+              <option value="all">全市场</option>
+              <option value="hs300">沪深300</option>
+              <option value="zz500">中证500</option>
+              <option value="cy50">创业板50</option>
+            </select>
+          </label>
           <label>行业
             <select id="industry-filter"></select>
           </label>
@@ -40,7 +48,6 @@
             <input type="range" id="score-min" min="0" max="100" value="60" />
           </label>
           <div class="weights" id="weights"></div>
-          <button id="apply">应用筛选</button>
         </aside>
 
         <section class="card panel">

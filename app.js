@@ -25,9 +25,12 @@ let analyzed = [];
 const qs = (s) => document.querySelector(s);
 const industryFilter = qs('#industry-filter');
 const riskProfile = qs('#risk-profile');
+const marketScope = qs('#market-scope');
 const scoreMin = qs('#score-min');
 const scoreMinV = qs('#score-min-v');
 const weightsDiv = qs('#weights');
+
+let allMarketStocks = [];
 
 function scorePct(pct) { return Math.max(0, Math.min(100, 50 + pct * 8)); }
 function scoreTurnover(v) {
@@ -148,6 +151,38 @@ async function fetchAllMarketStocks() {
   return all;
 }
 
+async function fetchIndexConstituents(symbol) {
+  const fields = 'f12,f14,f100,f2,f3,f6,f7,f8,f9,f15,f16';
+  const url = `https://push2.eastmoney.com/api/qt/clist/get?pn=1&pz=800&po=1&np=1&fltt=2&invt=2&fid=f3&fs=b:${symbol}&fields=${fields}`;
+  const data = await jsonp(url);
+  const diff = Array.isArray(data?.data?.diff) ? data.data.diff : [];
+  return diff.map(toStock).filter((s) => s.code && s.price > 0);
+}
+
+async function applyMarketScope() {
+  const v = marketScope.value;
+  if (v === 'all') {
+    stocks = [...allMarketStocks];
+    return;
+  }
+  const map = {
+    hs300: 'BK0500', // 沪深300
+    zz500: 'BK0701', // 中证500
+    cy50: 'BK0800',  // 创业板50
+  };
+  const symbol = map[v];
+  if (!symbol) {
+    stocks = [...allMarketStocks];
+    return;
+  }
+  qs('#summary').innerHTML = '<span>正在加载指数成分股...</span>';
+  try {
+    stocks = await fetchIndexConstituents(symbol);
+  } catch {
+    stocks = [...allMarketStocks];
+  }
+}
+
 function analyzeOne(s, weights) {
   const sub = {
     momentum: scorePct(s.pct),
@@ -195,8 +230,9 @@ function render() {
 async function refreshAllMarket() {
   qs('#summary').innerHTML = '<span>正在加载全市场股票，请稍候...</span>';
   try {
-    stocks = await fetchAllMarketStocks();
-    if (!stocks.length) throw new Error('empty');
+    allMarketStocks = await fetchAllMarketStocks();
+    if (!allMarketStocks.length) throw new Error('empty');
+    await applyMarketScope();
     setupIndustries();
     render();
   } catch (e) {
@@ -208,13 +244,53 @@ function setupLearn() {
   qs('#learn-cards').innerHTML = education.map(([t, d]) => `<article><h3>${t}</h3><p class="muted">${d}</p></article>`).join('');
 }
 
+function parseCSV(text) {
+  const lines = text.trim().split(/\r?\n/);
+  if (lines.length < 2) return [];
+  const header = lines[0].split(',').map((s) => s.trim());
+  const idx = Object.fromEntries(header.map((h, i) => [h, i]));
+  const need = ['code', 'name', 'industry', 'price', 'pct', 'turnover', 'pe', 'amplitude'];
+  if (need.some((k) => idx[k] == null)) return [];
+
+  return lines.slice(1).map((row) => {
+    const cols = row.split(',').map((s) => s.trim());
+    return {
+      code: cols[idx.code],
+      name: cols[idx.name],
+      industryRaw: cols[idx.industry],
+      industry: normalizeIndustry(cols[idx.industry]),
+      price: +(cols[idx.price] || 0),
+      pct: +(cols[idx.pct] || 0),
+      turnover: +(cols[idx.turnover] || 0),
+      pe: +(cols[idx.pe] || 0),
+      amplitude: +(cols[idx.amplitude] || 0),
+      amountWan: +(cols[idx.amountWan] || 0),
+    };
+  }).filter((s) => s.code && s.name);
+}
+
 qs('#load-demo').textContent = '刷新全市场数据';
 qs('#load-demo').onclick = refreshAllMarket;
 qs('#run-analysis').onclick = render;
-qs('#apply').onclick = render;
 riskProfile.onchange = () => { renderWeights(); render(); };
+marketScope.onchange = async () => { await applyMarketScope(); setupIndustries(); render(); };
+industryFilter.onchange = render;
 scoreMin.oninput = () => { scoreMinV.textContent = scoreMin.value; render(); };
-qs('#csv-input').style.display = 'none';
+
+qs('#csv-input').addEventListener('change', async (e) => {
+  const file = e.target.files?.[0];
+  if (!file) return;
+  const text = await file.text();
+  const parsed = parseCSV(text);
+  if (!parsed.length) {
+    alert('CSV字段需包含: code,name,industry,price,pct,turnover,pe,amplitude');
+    return;
+  }
+  stocks = parsed;
+  allMarketStocks = parsed;
+  setupIndustries();
+  render();
+});
 
 renderWeights();
 setupLearn();

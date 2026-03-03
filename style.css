@@ -17,7 +17,8 @@ body{margin:0;background:radial-gradient(circle at 10% 0%,#e6f4ff,transparent 30
 h1{margin:0;font-size:32px;letter-spacing:.5px}
 .topbar p{margin:.2rem 0 0;color:var(--muted)}
 .top-actions{display:flex;gap:10px;align-items:center}
-button,.upload{border:0;background:linear-gradient(135deg,var(--accent),var(--accent-2));color:#fff;padding:10px 14px;border-radius:10px;cursor:pointer;font-weight:600}
+button,.upload{border:0;background:linear-gradient(135deg,var(--accent),var(--accent-2));color:#fff;padding:10px 14px;border-radius:10px;cursor:pointer;font-weight:600;display:inline-flex;align-items:center;justify-content:center;line-height:1;min-height:38px}
+.upload{vertical-align:middle}
 .upload input{display:none}
 .panel{padding:16px 18px}
 .grid-2{display:grid;grid-template-columns:320px 1fr;gap:14px}
